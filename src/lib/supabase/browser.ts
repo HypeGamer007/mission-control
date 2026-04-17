@@ -1,13 +1,8 @@
+import { createBrowserClient } from "@supabase/ssr";
 import { env } from "@/lib/env";
-import { createClient } from "@supabase/supabase-js";
 
 export function createSupabaseBrowserClient() {
-  return createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true
-    }
-  });
+  // Browser client uses cookie-backed storage compatible with middleware session checks.
+  return createBrowserClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
