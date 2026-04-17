@@ -227,20 +227,3 @@ function randomLocalId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-        </div>
-      </div>
-
-      <div style={{ marginTop: 12, display: "flex", gap: 10 }}>
-        <input
-          disabled
-          placeholder="Message the CoS…"
-          style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#f9fafb" }}
-        />
-        <button disabled style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#111827", color: "white", fontWeight: 800 }}>
-          Send
-        </button>
-      </div>
-    </div>
-  );
-}
-
