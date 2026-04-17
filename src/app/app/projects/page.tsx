@@ -55,7 +55,7 @@ export default function ProjectsPage() {
       if (userError) throw userError;
       if (!user) throw new Error("Not authenticated");
 
-      const teamIns = await supabase.from("mc_teams").insert({ name: newTeamName, created_by: user.id }).select("id,name").single();
+      const teamIns = await supabase.from("mc_teams").insert({ name: newTeamName }).select("id,name").single();
       if (teamIns.error) throw teamIns.error;
 
       const memberIns = await supabase.from("mc_team_members").insert({ team_id: teamIns.data.id, user_id: user.id, role: "admin" });
@@ -89,7 +89,7 @@ export default function ProjectsPage() {
           description: newProjectDesc || null,
           openclaw_gateway_ws_url: newProjectGatewayUrl || null,
           openclaw_operator_token: newProjectOperatorToken.trim() || null,
-          created_by: user.id
+          // created_by is set server-side via trigger/RLS
         })
         .select("id")
         .single();
