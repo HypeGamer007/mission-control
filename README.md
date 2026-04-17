@@ -4,18 +4,21 @@ Next.js dashboard for operating an OpenClaw Gateway + a Supabase-backed org (pro
 
 ## GitHub
 
-Create a new empty repository on GitHub named **`Mission-Control`** (hyphenated URL: `Mission-Control`), then from this folder:
+This repo is already initialized with `git` on branch **`main`**. To connect it to a new GitHub repository:
+
+1. On [github.com/new](https://github.com/new), create a repository named **`Mission-Control`** (GitHub will show the slug as `Mission-Control`). Do **not** add a README, `.gitignore`, or license (avoids merge conflicts).
+2. From this project folder, add the remote and push (replace `YOUR_USER` with your GitHub username or org):
 
 ```bash
-git init
-git add .
-git commit -m "Initial commit: Mission Control"
-git branch -M main
 git remote add origin https://github.com/YOUR_USER/Mission-Control.git
 git push -u origin main
 ```
 
-If you use the **GitHub** integration in Cursor, you can use **Publish to GitHub** and choose the new repo name instead of the commands above. Ensure `.env.local` is never committed (it is listed in `.gitignore`).
+If you use Cursor’s **Publish to GitHub** flow, pick the empty **`Mission-Control`** repo you created, then push.
+
+Optional: set your name/email for commits (`git config user.name "..."` and `git config user.email "..."` in this repo or globally), then `git commit --amend --reset-author` on the last commit if needed.
+
+`.env.local` is ignored and will not be pushed (see `.gitignore`).
 
 ## Prereqs
 
