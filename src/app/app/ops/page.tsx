@@ -1,14 +1,25 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { env } from "@/lib/env";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
+import { useProjectGatewayCredentials } from "@/lib/openclaw/useProjectGatewayCredentials";
+import { pasteOperatorTokenFromClipboard } from "@/lib/openclaw/connectionUi";
+
+type Project = { id: string; name: string; openclaw_gateway_ws_url: string | null };
 
 export default function OpsPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const gwRef = useRef<OpenClawGatewayClient | null>(null);
 
-  const [gatewayUrl, setGatewayUrl] = useState(env.NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL);
-  const [token, setToken] = useState(env.NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN ?? "");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState("");
+
+  const { gatewayUrl, setGatewayUrl, token, setToken, refresh: reloadProjectCredentials } = useProjectGatewayCredentials(
+    supabase,
+    projectId || undefined
+  );
+
   const [status, setStatus] = useState("disconnected");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +31,16 @@ export default function OpsPage() {
   const [logTail, setLogTail] = useState<any>(null);
   const [tickTs, setTickTs] = useState<number | null>(null);
   const [heartbeatEvents, setHeartbeatEvents] = useState<any[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await supabase.from("mc_projects").select("id,name,openclaw_gateway_ws_url").order("created_at", { ascending: false });
+      if (!res.error && res.data?.length) {
+        setProjects(res.data as Project[]);
+        setProjectId(res.data[0]!.id);
+      }
+    })();
+  }, [supabase]);
 
   const connect = useMemo(
     () => async () => {
@@ -82,9 +103,40 @@ export default function OpsPage() {
       ) : null}
 
       <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, display: "grid", gap: 10 }}>
-        <div style={{ fontWeight: 800 }}>Connect</div>
+        <div style={{ fontWeight: 800 }}>Project + connect</div>
+        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}>
+          <option value="">Select project</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
         <input value={gatewayUrl} onChange={(e) => setGatewayUrl(e.target.value)} placeholder="Gateway WS URL" style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }} />
-        <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Operator token" style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }} />
+        <input
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder="Operator token (per project)"
+          autoComplete="off"
+          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+        />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            disabled={!projectId}
+            onClick={() => void reloadProjectCredentials()}
+            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
+          >
+            Reload from project
+          </button>
+          <button
+            type="button"
+            onClick={() => void pasteOperatorTokenFromClipboard(setToken)}
+            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
+          >
+            Paste token
+          </button>
+        </div>
         <button disabled={busy || !gatewayUrl} onClick={connect} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#111827", color: "white", fontWeight: 800 }}>
           Connect
         </button>
@@ -162,4 +214,3 @@ function Dump(props: { title: string; value: any }) {
     </div>
   );
 }
-

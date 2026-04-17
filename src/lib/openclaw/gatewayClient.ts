@@ -58,8 +58,14 @@ export class OpenClawGatewayClient {
   private tickWatchTimer: number | null = null;
 
   constructor(opts: GatewayConnectOptions = {}) {
-    this.url = opts.url ?? env.NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL;
-    this.token = opts.token ?? env.NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN;
+    this.url = (opts.url?.trim() || env.NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL) as string;
+    // If `token` is omitted, fall back to env. If the key is present (including ""), do not merge env.
+    if (!("token" in opts)) {
+      this.token = env.NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN?.trim() || undefined;
+    } else {
+      const t = opts.token;
+      this.token = t == null || t === "" ? undefined : String(t).trim() || undefined;
+    }
     this.role = opts.role ?? "operator";
     this.scopes = opts.scopes ?? ["operator.read", "operator.write"];
     this.client = opts.client ?? { id: "mission-control", version: "0.1.0", platform: "web", mode: "operator" };

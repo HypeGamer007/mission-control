@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { env } from "@/lib/env";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
+import { useProjectGatewayCredentials } from "@/lib/openclaw/useProjectGatewayCredentials";
+import { pasteOperatorTokenFromClipboard } from "@/lib/openclaw/connectionUi";
 
 type Project = { id: string; name: string; openclaw_gateway_ws_url: string | null };
 type ChatRow = { id: string; ts: number; role: "user" | "assistant" | "system"; label?: string; content: string };
@@ -15,8 +16,8 @@ export function CosChatDock() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<string>("");
 
-  const [gatewayUrl, setGatewayUrl] = useState(env.NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL);
-  const [token, setToken] = useState(env.NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN ?? "");
+  const { gatewayUrl, setGatewayUrl, token, setToken, loading: credsLoading, refresh: reloadProjectCredentials } =
+    useProjectGatewayCredentials(supabase, projectId || undefined);
 
   const [sessionKey, setSessionKey] = useState<string>("");
   const [status, setStatus] = useState<string>("disconnected");
@@ -32,19 +33,11 @@ export function CosChatDock() {
       if (!res.error) {
         setProjects((res.data ?? []) as any);
         const first = (res.data ?? [])[0] as any;
-        if (first?.id) {
-          setProjectId(first.id);
-          if (first.openclaw_gateway_ws_url) setGatewayUrl(first.openclaw_gateway_ws_url);
-        }
+        if (first?.id) setProjectId(first.id);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    const p = projects.find((x) => x.id === projectId);
-    if (p?.openclaw_gateway_ws_url) setGatewayUrl(p.openclaw_gateway_ws_url);
-  }, [projectId, projects]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -173,9 +166,28 @@ export function CosChatDock() {
         <input
           value={token}
           onChange={(e) => setToken(e.target.value)}
-          placeholder="Operator token"
+          placeholder="Operator token (saved per project on Projects page)"
+          autoComplete="off"
           style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
         />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            disabled={busy || !projectId || credsLoading}
+            onClick={() => void reloadProjectCredentials()}
+            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
+          >
+            Reload from project
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void pasteOperatorTokenFromClipboard(setToken)}
+            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
+          >
+            Paste token
+          </button>
+        </div>
         <button
           disabled={busy || !projectId || !gatewayUrl}
           onClick={connectCos}

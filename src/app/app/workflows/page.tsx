@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { env } from "@/lib/env";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
+import { useProjectGatewayCredentials } from "@/lib/openclaw/useProjectGatewayCredentials";
+import { pasteOperatorTokenFromClipboard } from "@/lib/openclaw/connectionUi";
 
 type Project = { id: string; name: string; description: string | null; openclaw_gateway_ws_url: string | null };
 
@@ -13,8 +14,10 @@ export default function WorkflowsPage() {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState("");
-  const [gatewayUrl, setGatewayUrl] = useState(env.NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL);
-  const [token, setToken] = useState(env.NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN ?? "");
+  const { gatewayUrl, setGatewayUrl, token, setToken, refresh: reloadProjectCredentials } = useProjectGatewayCredentials(
+    supabase,
+    projectId || undefined
+  );
 
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -34,19 +37,11 @@ export default function WorkflowsPage() {
       if (!res.error) {
         setProjects((res.data ?? []) as any);
         const first = (res.data ?? [])[0] as any;
-        if (first?.id) {
-          setProjectId(first.id);
-          if (first.openclaw_gateway_ws_url) setGatewayUrl(first.openclaw_gateway_ws_url);
-        }
+        if (first?.id) setProjectId(first.id);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    const p = projects.find((x) => x.id === projectId);
-    if (p?.openclaw_gateway_ws_url) setGatewayUrl(p.openclaw_gateway_ws_url);
-  }, [projectId, projects]);
 
   async function connectGateway() {
     const gw = new OpenClawGatewayClient({
@@ -228,7 +223,30 @@ export default function WorkflowsPage() {
           ))}
         </select>
         <input value={gatewayUrl} onChange={(e) => setGatewayUrl(e.target.value)} placeholder="Gateway WS URL" style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }} />
-        <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Operator token" style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }} />
+        <input
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder="Operator token (per project)"
+          autoComplete="off"
+          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+        />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            disabled={!projectId}
+            onClick={() => void reloadProjectCredentials()}
+            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
+          >
+            Reload from project
+          </button>
+          <button
+            type="button"
+            onClick={() => void pasteOperatorTokenFromClipboard(setToken)}
+            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
+          >
+            Paste token
+          </button>
+        </div>
       </div>
 
       <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, display: "grid", gap: 10 }}>

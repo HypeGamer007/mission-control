@@ -1,16 +1,17 @@
 import type { ReactNode } from "react";
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export const metadata = {
-  title: "OpenClaw Mission Control",
-  description: "Mission Control dashboard for OpenClaw + Supabase CRM."
+  title: "Mission Control",
+  description: "Operator console for campaigns, leads, and AI agents."
 };
 
 export default function RootLayout(props: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body style={{ margin: 0, fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" }}>
-        {props.children}
-      </body>
+    <html lang="en" className={inter.className}>
+      <body style={{ margin: 0 }}>{props.children}</body>
     </html>
   );
 }

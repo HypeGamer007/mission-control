@@ -20,7 +20,7 @@ flowchart LR
   subgraph data [Data]
     SB[(Supabase Postgres + Auth)]
   end
-  MC -->|"NEXT_PUBLIC_* WS + token"| GW
+  MC -->|"WS + operator token (env or per-project)"| GW
   GW --> AG
   MC -->|"Supabase client anon + RLS"| SB
 ```
@@ -39,11 +39,11 @@ Mission Control’s **`OpenClawGatewayClient`** ([`src/lib/openclaw/gatewayClien
 
 | Area | Purpose |
 |------|---------|
-| **Auth** | Supabase Auth; [`profiles`](supabase/migrations/20260416_000001_init.sql) + middleware for session. |
-| **Projects** | Teams (`mc_teams`), members (`mc_team_members`), projects (`mc_projects`) with optional per-project **`openclaw_gateway_ws_url`**. |
-| **Chief of Staff (CoS)** | Dock UI: WebSocket to Gateway, session key `cos_<projectIdWithoutHyphens>`, RPCs `sessions.create`, `sessions.messages.subscribe`, `sessions.send`, `chat.history`; listens for `session.message` and `chat`. |
-| **Agents** | Lists/creates/deletes Gateway agents via `agents.list`, `agents.create`, `agents.delete` (workspace default e.g. `marketing-suite`). |
-| **Ops** | Gateway introspection: `health`, `status`, `system-presence`, `last-heartbeat`, `logs.tail`, `set-heartbeats`; subscribes to `tick` and `heartbeat`. |
+| **Auth** | Supabase Auth; [`profiles`](supabase/migrations/20260417120001_init.sql) + middleware for session. |
+| **Projects** | Teams (`mc_teams`), members (`mc_team_members`), projects (`mc_projects`) with optional per-project **`openclaw_gateway_ws_url`** and **`openclaw_operator_token`** (falls back to env when unset). |
+| **Chief of Staff (CoS)** | Dock UI: WebSocket to Gateway, session key `cos_<projectIdWithoutHyphens>`, RPCs `sessions.create`, `sessions.messages.subscribe`, `sessions.send`, `chat.history`; listens for `session.message` and `chat`. Loads URL/token from the selected project when saved. |
+| **Agents** | **`mc_agent_teams`** per project map to OpenClaw `workspace` strings; default teams (`general`, `outbound`, `ops`) are created on new projects. Lists/creates/deletes via `agents.list`, `agents.create`, `agents.delete`. |
+| **Ops** | Same Gateway connection pattern as other screens: pick a **project**, then Gateway introspection (`health`, `status`, `system-presence`, `last-heartbeat`, `logs.tail`, `set-heartbeats`); subscribes to `tick` and `heartbeat`. |
 | **Workflows** | Creates lead + source in Supabase, opens Gateway session `wf_<leadId>`, sends structured prompt via `chat.send`, parses JSON result, writes `mc_lead_enrichments`, `mc_outreach_messages`, `mc_agent_runs`. |
 | **Leads** | CRUD-style lead entry tied to a project (`mc_leads`). |
 
@@ -75,7 +75,7 @@ Gateway **policy** (e.g. `tickIntervalMs`, payload limits) comes back on `hello-
 ## Agents: what exists now vs what we’re building toward
 
 **Today (Gateway agents)**  
-The **Agents** screen treats OpenClaw **agents** as Gateway-managed entities: you create them with `agents.create` (name, workspace, emoji) and they show up in `agents.list`. These are the right abstraction for **long-running or named workers** the Gateway schedules (exact behavior is defined by your OpenClaw deployment and agent packs).
+The **Agents** screen treats OpenClaw **agents** as Gateway-managed entities: you assign an **agent team** (stored in `mc_agent_teams`) so `agents.create` uses that team’s workspace string. New projects get default teams via a DB trigger; use **`mc_seed_default_agent_teams`** if you need to re-seed. OpenClaw behavior depends on your deployment and agent packs.
 
 **Recommended agent lineup (to implement / standardize in OpenClaw)**  
 
@@ -99,8 +99,8 @@ All variables are validated in [`src/lib/env.ts`](src/lib/env.ts). **Do not comm
 |----------|----------|---------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon (public) key; RLS enforced. |
-| `NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL` | Yes | Gateway WebSocket URL (`ws://` or `wss://`). |
-| `NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN` | Optional | Operator token for `connect` auth (recommended outside pure local dev). |
+| `NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL` | Yes | Default Gateway WebSocket URL (`ws://` or `wss://`). Each project can override with **`openclaw_gateway_ws_url`** in `mc_projects`. |
+| `NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN` | Optional | Default operator token for `connect` auth. Each project can store **`openclaw_operator_token`** in `mc_projects`; UI uses **Reload from project** to pull saved values. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Optional | Only for future server-only admin automation; **never** expose to the browser. |
 
 **Mock template:** copy [`.env.example`](.env.example) → **`.env.local`** and replace every `MOCK` / placeholder. `.env.local` is listed in `.gitignore`.
@@ -113,7 +113,7 @@ All variables are validated in [`src/lib/env.ts`](src/lib/env.ts). **Do not comm
 
 - **Node.js** 22+
 - **npm** (or pnpm/yarn)
-- A **Supabase** project with the migration applied ([`supabase/migrations/20260416_000001_init.sql`](supabase/migrations/20260416_000001_init.sql))
+- A **Supabase** project with migrations applied (see [`supabase/migrations/`](supabase/migrations/) — run **all** files in version order, or `supabase db push` after `supabase link`)
 - An **OpenClaw Gateway** reachable from the browser (and operator token if required)
 
 ---
@@ -129,7 +129,9 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Apply the SQL migration via **Supabase CLI**, **SQL editor**, or your usual migration path.
+Apply migrations via **`npx supabase login`**, **`npx supabase link --project-ref <ref>`**, **`npx supabase db push`**, or paste each SQL file in order into the Supabase **SQL editor**. Migration filenames must use **unique version prefixes** (e.g. `20260417120001_…`) so the CLI does not merge multiple files into one version.
+
+**OpenClaw connection in the UI:** set Gateway URL and operator token on **Projects** (or rely on env defaults). CoS, Agents, Workflows, and Ops support **Reload from project** and **Paste token** so you do not re-type credentials every session.
 
 ---
 
@@ -148,6 +150,7 @@ Apply the SQL migration via **Supabase CLI**, **SQL editor**, or your usual migr
 
 - Use the **anon** key in the client only; RLS policies guard `mc_*` tables.
 - Treat **`NEXT_PUBLIC_*`** as **public** (they ship to the browser). Do not put **service role** keys in any `NEXT_PUBLIC_` variable.
+- **Per-project operator tokens** in `mc_projects` are readable by **project members** via the Supabase client when connecting—same trust model as any shared API key. For stricter isolation, use a server proxy, Vault, or Edge Functions instead of long-lived tokens in Postgres.
 - Prefer **`wss://`** and locked-down Gateway auth in any shared or production environment.
 
 ---

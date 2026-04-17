@@ -23,7 +23,7 @@ export function AppShell(props: { children: ReactNode }) {
     <div style={{ height: "100vh", display: "grid", gridTemplateColumns: "240px 1fr 420px" }}>
       <aside style={{ borderRight: "1px solid #e5e7eb", padding: 14, overflow: "auto" }}>
         <div style={{ fontWeight: 900, letterSpacing: "-0.02em" }}>Mission Control</div>
-        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>OpenClaw + Supabase</div>
+        <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>Campaigns & agent ops</div>
 
         <nav style={{ marginTop: 16, display: "grid", gap: 6 }}>
           {navItems.map((item) => {
