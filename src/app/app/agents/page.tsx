@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
-import { useProjectGatewayCredentials } from "@/lib/openclaw/useProjectGatewayCredentials";
-import { pasteOperatorTokenFromClipboard } from "@/lib/openclaw/connectionUi";
+import { useOpenClawConnection } from "@/lib/openclaw/OpenClawConnectionContext";
 
 type Project = { id: string; name: string; openclaw_gateway_ws_url: string | null };
 type AgentTeam = { id: string; project_id: string; name: string; openclaw_workspace: string };
@@ -19,15 +18,14 @@ function normalizeWorkspace(s: string) {
 export default function AgentsPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const gwRef = useRef<OpenClawGatewayClient | null>(null);
+  const conn = useOpenClawConnection();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState("");
   const [agentTeams, setAgentTeams] = useState<AgentTeam[]>([]);
 
-  const { gatewayUrl, setGatewayUrl, token, setToken, refresh: reloadProjectCredentials } = useProjectGatewayCredentials(
-    supabase,
-    projectId || undefined
-  );
+  const gatewayUrl = conn.gatewayUrl;
+  const token = conn.token;
   const [status, setStatus] = useState("disconnected");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -330,31 +328,8 @@ export default function AgentsPage() {
 
       <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, display: "grid", gap: 10 }}>
         <div style={{ fontWeight: 800 }}>Connect to Gateway</div>
-        <input value={gatewayUrl} onChange={(e) => setGatewayUrl(e.target.value)} placeholder="Gateway WS URL" style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }} />
-        <input
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="Operator token (per project; set on Projects page)"
-          autoComplete="off"
-          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
-        />
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            disabled={busy || !projectId}
-            onClick={() => void reloadProjectCredentials()}
-            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
-          >
-            Reload from project
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void pasteOperatorTokenFromClipboard(setToken)}
-            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
-          >
-            Paste token
-          </button>
+        <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.45 }}>
+          Connection is set on <strong>OpenClaw</strong> (left nav). This screen uses that instance configuration.
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button disabled={busy || !gatewayUrl} onClick={connect} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#111827", color: "white", fontWeight: 800 }}>

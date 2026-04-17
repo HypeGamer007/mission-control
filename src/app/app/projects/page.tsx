@@ -19,7 +19,6 @@ export default function ProjectsPage() {
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
   const [newProjectGatewayUrl, setNewProjectGatewayUrl] = useState("");
-  const [newProjectOperatorToken, setNewProjectOperatorToken] = useState("");
 
   const [gwEditProjectId, setGwEditProjectId] = useState<string | null>(null);
   const [gwEditUrl, setGwEditUrl] = useState("");
@@ -88,7 +87,6 @@ export default function ProjectsPage() {
           name: newProjectName,
           description: newProjectDesc || null,
           openclaw_gateway_ws_url: newProjectGatewayUrl || null,
-          openclaw_operator_token: newProjectOperatorToken.trim() || null,
           // created_by is set server-side via trigger/RLS
         })
         .select("id")
@@ -101,7 +99,6 @@ export default function ProjectsPage() {
       setNewProjectName("");
       setNewProjectDesc("");
       setNewProjectGatewayUrl("");
-      setNewProjectOperatorToken("");
       await refresh();
     } catch (e: any) {
       setError(e?.message ?? "Failed to create project");
@@ -115,7 +112,7 @@ export default function ProjectsPage() {
       <div>
         <div style={{ fontSize: 18, fontWeight: 800 }}>Projects</div>
         <div style={{ opacity: 0.75, marginTop: 6 }}>
-          Teams and projects are stored in Supabase and scoped by RLS. Set Gateway URL and operator token per project (falls back to app env when left empty).
+          Teams and projects are stored in Supabase. RLS is currently disabled for local-dev convenience. OpenClaw connection is configured under <strong>OpenClaw</strong> in the left nav.
         </div>
       </div>
 
@@ -175,14 +172,9 @@ export default function ProjectsPage() {
               placeholder="OpenClaw Gateway WS URL (optional)"
               style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
             />
-            <input
-              value={newProjectOperatorToken}
-              onChange={(e) => setNewProjectOperatorToken(e.target.value)}
-              placeholder="OpenClaw operator token (optional, stored for this project)"
-              autoComplete="off"
-              type="password"
-              style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
-            />
+            <div style={{ fontSize: 12, opacity: 0.65, lineHeight: 1.45 }}>
+              OpenClaw operator token is set once under <strong>OpenClaw</strong> (left nav). (Per-project tokens are not used in local-dev mode.)
+            </div>
             <textarea
               value={newProjectDesc}
               onChange={(e) => setNewProjectDesc(e.target.value)}
@@ -216,7 +208,7 @@ export default function ProjectsPage() {
               <div style={{ opacity: 0.75, marginTop: 6, fontSize: 12 }}>Project ID: {p.id}</div>
               {gwEditProjectId === p.id ? (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #f1f5f9", display: "grid", gap: 10 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>OpenClaw connection</div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>Project Gateway URL (optional)</div>
                   {gwEditLoading ? (
                     <div style={{ fontSize: 13, opacity: 0.7 }}>Loading…</div>
                   ) : (
@@ -226,18 +218,7 @@ export default function ProjectsPage() {
                         <input
                           value={gwEditUrl}
                           onChange={(e) => setGwEditUrl(e.target.value)}
-                          placeholder="wss://…"
-                          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
-                        />
-                      </label>
-                      <label style={{ display: "grid", gap: 6 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>Operator token</span>
-                        <input
-                          value={gwEditToken}
-                          onChange={(e) => setGwEditToken(e.target.value)}
-                          placeholder="Leave empty to clear; app env used as fallback when unset"
-                          autoComplete="off"
-                          type="password"
+                          placeholder="ws://127.0.0.1:18789"
                           style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
                         />
                       </label>
@@ -249,13 +230,7 @@ export default function ProjectsPage() {
                             setBusy(true);
                             setError(null);
                             try {
-                              const u = await supabase
-                                .from("mc_projects")
-                                .update({
-                                  openclaw_gateway_ws_url: gwEditUrl.trim() || null,
-                                  openclaw_operator_token: gwEditToken.trim() || null
-                                })
-                                .eq("id", p.id);
+                              const u = await supabase.from("mc_projects").update({ openclaw_gateway_ws_url: gwEditUrl.trim() || null }).eq("id", p.id);
                               if (u.error) throw u.error;
                               setGwEditProjectId(null);
                               await refresh();
@@ -278,6 +253,9 @@ export default function ProjectsPage() {
                           Cancel
                         </button>
                       </div>
+                      <div style={{ fontSize: 12, opacity: 0.65, lineHeight: 1.45 }}>
+                        Operator token is set once under <strong>OpenClaw</strong> (left nav).
+                      </div>
                     </>
                   )}
                 </div>
@@ -289,19 +267,13 @@ export default function ProjectsPage() {
                     setGwEditProjectId(p.id);
                     setGwEditLoading(true);
                     setGwEditUrl("");
-                    setGwEditToken("");
                     setError(null);
                     try {
-                      const res = await supabase
-                        .from("mc_projects")
-                        .select("openclaw_gateway_ws_url, openclaw_operator_token")
-                        .eq("id", p.id)
-                        .single();
+                      const res = await supabase.from("mc_projects").select("openclaw_gateway_ws_url").eq("id", p.id).single();
                       if (res.error) throw res.error;
                       setGwEditUrl((res.data?.openclaw_gateway_ws_url as string) ?? "");
-                      setGwEditToken((res.data?.openclaw_operator_token as string) ?? "");
                     } catch (e: any) {
-                      setError(e?.message ?? "Failed to load credentials");
+                      setError(e?.message ?? "Failed to load");
                       setGwEditProjectId(null);
                     } finally {
                       setGwEditLoading(false);
@@ -309,7 +281,7 @@ export default function ProjectsPage() {
                   }}
                   style={{ marginTop: 10, padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
                 >
-                  Edit OpenClaw URL and token
+                  Edit project Gateway URL
                 </button>
               )}
             </div>

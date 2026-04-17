@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
-import { useProjectGatewayCredentials } from "@/lib/openclaw/useProjectGatewayCredentials";
-import { pasteOperatorTokenFromClipboard } from "@/lib/openclaw/connectionUi";
+import { useOpenClawConnection } from "@/lib/openclaw/OpenClawConnectionContext";
 
 type Project = { id: string; name: string; openclaw_gateway_ws_url: string | null };
 type ChatRow = { id: string; ts: number; role: "user" | "assistant" | "system"; label?: string; content: string };
@@ -12,12 +11,10 @@ type ChatRow = { id: string; ts: number; role: "user" | "assistant" | "system"; 
 export function CosChatDock() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const gatewayRef = useRef<OpenClawGatewayClient | null>(null);
+  const conn = useOpenClawConnection();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<string>("");
-
-  const { gatewayUrl, setGatewayUrl, token, setToken, loading: credsLoading, refresh: reloadProjectCredentials } =
-    useProjectGatewayCredentials(supabase, projectId || undefined);
 
   const [sessionKey, setSessionKey] = useState<string>("");
   const [status, setStatus] = useState<string>("disconnected");
@@ -52,8 +49,8 @@ export function CosChatDock() {
       setSessionKey(session);
 
       const gw = new OpenClawGatewayClient({
-        url: gatewayUrl,
-        token,
+        url: conn.gatewayUrl,
+        token: conn.token,
         role: "operator",
         scopes: ["operator.read", "operator.write"],
         client: { id: "mission-control", version: "0.1.0", platform: "web", mode: "operator", displayName: "Mission Control" }
@@ -157,39 +154,8 @@ export function CosChatDock() {
             </option>
           ))}
         </select>
-        <input
-          value={gatewayUrl}
-          onChange={(e) => setGatewayUrl(e.target.value)}
-          placeholder="Gateway WS URL"
-          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
-        />
-        <input
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="Operator token (saved per project on Projects page)"
-          autoComplete="off"
-          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
-        />
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            disabled={busy || !projectId || credsLoading}
-            onClick={() => void reloadProjectCredentials()}
-            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
-          >
-            Reload from project
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void pasteOperatorTokenFromClipboard(setToken)}
-            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
-          >
-            Paste token
-          </button>
-        </div>
         <button
-          disabled={busy || !projectId || !gatewayUrl}
+          disabled={busy || !projectId || !conn.gatewayUrl}
           onClick={connectCos}
           style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#111827", color: "white", fontWeight: 800 }}
         >

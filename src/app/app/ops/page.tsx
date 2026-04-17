@@ -3,22 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
-import { useProjectGatewayCredentials } from "@/lib/openclaw/useProjectGatewayCredentials";
-import { pasteOperatorTokenFromClipboard } from "@/lib/openclaw/connectionUi";
+import { useOpenClawConnection } from "@/lib/openclaw/OpenClawConnectionContext";
 
 type Project = { id: string; name: string; openclaw_gateway_ws_url: string | null };
 
 export default function OpsPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const gwRef = useRef<OpenClawGatewayClient | null>(null);
+  const conn = useOpenClawConnection();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState("");
 
-  const { gatewayUrl, setGatewayUrl, token, setToken, refresh: reloadProjectCredentials } = useProjectGatewayCredentials(
-    supabase,
-    projectId || undefined
-  );
+  const gatewayUrl = conn.gatewayUrl;
+  const token = conn.token;
 
   const [status, setStatus] = useState("disconnected");
   const [busy, setBusy] = useState(false);
@@ -112,30 +110,8 @@ export default function OpsPage() {
             </option>
           ))}
         </select>
-        <input value={gatewayUrl} onChange={(e) => setGatewayUrl(e.target.value)} placeholder="Gateway WS URL" style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }} />
-        <input
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="Operator token (per project)"
-          autoComplete="off"
-          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
-        />
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            disabled={!projectId}
-            onClick={() => void reloadProjectCredentials()}
-            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
-          >
-            Reload from project
-          </button>
-          <button
-            type="button"
-            onClick={() => void pasteOperatorTokenFromClipboard(setToken)}
-            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 700, fontSize: 13 }}
-          >
-            Paste token
-          </button>
+        <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.45 }}>
+          Gateway connection comes from <strong>OpenClaw</strong> (left nav). This screen uses that instance configuration.
         </div>
         <button disabled={busy || !gatewayUrl} onClick={connect} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#111827", color: "white", fontWeight: 800 }}>
           Connect
