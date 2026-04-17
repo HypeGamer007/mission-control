@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type Project = { id: string; name: string };
@@ -27,17 +27,20 @@ export default function LeadsPage() {
     if (!projectId && (res.data?.[0]?.id ?? "")) setProjectId(res.data![0]!.id);
   }
 
-  async function refreshLeads(pid: string) {
-    if (!pid) return;
-    const res = await supabase
-      .from("mc_leads")
-      .select("id,project_id,status,full_name,company,title,email,created_at")
-      .eq("project_id", pid)
-      .order("created_at", { ascending: false })
-      .limit(100);
-    if (res.error) throw res.error;
-    setLeads(res.data ?? []);
-  }
+  const refreshLeads = useCallback(
+    async (pid: string) => {
+      if (!pid) return;
+      const res = await supabase
+        .from("mc_leads")
+        .select("id,project_id,status,full_name,company,title,email,created_at")
+        .eq("project_id", pid)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (res.error) throw res.error;
+      setLeads(res.data ?? []);
+    },
+    [supabase]
+  );
 
   useEffect(() => {
     (async () => {
@@ -60,7 +63,7 @@ export default function LeadsPage() {
         setError(e?.message ?? "Failed to load leads");
       }
     })();
-  }, [projectId]);
+  }, [projectId, refreshLeads]);
 
   async function addLead() {
     setBusy(true);

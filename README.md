@@ -105,6 +105,8 @@ All variables are validated in [`src/lib/env.ts`](src/lib/env.ts). **Do not comm
 
 **Mock template:** copy [`.env.example`](.env.example) → **`.env.local`** and replace every `MOCK` / placeholder. `.env.local` is listed in `.gitignore`.
 
+**Supabase MCP note:** Cursor’s Supabase MCP only sees projects your linked account can access. If your Mission Control database lives under another org or ref (for example a project that returns “permission denied” in MCP), copy **Project URL** and the **anon** key from **Supabase Dashboard → Project Settings → API** into `.env.local` manually. This repo does not commit `.env.local`.
+
 ---
 
 ## Prereqs
