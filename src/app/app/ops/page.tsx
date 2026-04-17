@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
 import { useOpenClawConnection } from "@/lib/openclaw/OpenClawConnectionContext";
+import { resolveProjectOpenClawCreds } from "@/lib/openclaw/resolveProjectInstance";
 
 type Project = { id: string; name: string; openclaw_gateway_ws_url: string | null };
 
@@ -45,9 +46,10 @@ export default function OpsPage() {
       setBusy(true);
       setError(null);
       try {
+        const creds = await resolveProjectOpenClawCreds(supabase as any, projectId || undefined, { gatewayUrl, token });
         const gw = new OpenClawGatewayClient({
-          url: gatewayUrl,
-          token,
+          url: creds.gatewayUrl,
+          token: creds.token,
           role: "operator",
           scopes: ["operator.read", "operator.write"],
           client: { id: "mission-control", version: "0.1.0", platform: "web", mode: "operator", displayName: "Mission Control" }
@@ -70,7 +72,7 @@ export default function OpsPage() {
         setBusy(false);
       }
     },
-    [gatewayUrl, token]
+    [gatewayUrl, token, projectId, supabase]
   );
 
   async function run(method: string, params?: unknown) {

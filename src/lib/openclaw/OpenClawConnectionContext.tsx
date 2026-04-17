@@ -1,14 +1,16 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { env } from "@/lib/env";
 import { clearOpenClawConnection, loadOpenClawConnection, saveOpenClawConnection } from "@/lib/openclaw/connectionStore";
 
 type Conn = {
   gatewayUrl: string;
   token: string;
+  instanceId: string | null;
   setGatewayUrl: (v: string) => void;
   setToken: (v: string) => void;
+  setInstanceId: (v: string | null) => void;
   save: () => void;
   clear: () => void;
 };
@@ -20,12 +22,14 @@ export function OpenClawConnectionProvider(props: { children: React.ReactNode })
     const saved = loadOpenClawConnection();
     return {
       gatewayUrl: saved?.gatewayUrl || env.NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL,
-      token: saved?.token || env.NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN || ""
+      token: saved?.token || env.NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN || "",
+      instanceId: null as string | null
     };
   }, []);
 
   const [gatewayUrl, setGatewayUrl] = useState(initial.gatewayUrl);
   const [token, setToken] = useState(initial.token);
+  const [instanceId, setInstanceId] = useState<string | null>(initial.instanceId);
 
   // Keep state in sync if localStorage changes in another tab.
   useEffect(() => {
@@ -40,16 +44,21 @@ export function OpenClawConnectionProvider(props: { children: React.ReactNode })
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  const save = useCallback(() => saveOpenClawConnection({ gatewayUrl, token }), [gatewayUrl, token]);
+
   const value: Conn = {
     gatewayUrl,
     token,
+    instanceId,
     setGatewayUrl,
     setToken,
-    save: () => saveOpenClawConnection({ gatewayUrl, token }),
+    setInstanceId,
+    save,
     clear: () => {
       clearOpenClawConnection();
       setGatewayUrl(env.NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL);
       setToken(env.NEXT_PUBLIC_OPENCLAW_OPERATOR_TOKEN || "");
+      setInstanceId(null);
     }
   };
 

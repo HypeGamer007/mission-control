@@ -1,23 +1,163 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
 import { useOpenClawConnection } from "@/lib/openclaw/OpenClawConnectionContext";
 import { pasteOperatorTokenFromClipboard } from "@/lib/openclaw/connectionUi";
 
+type InstanceRow = { id: string; name: string; gateway_ws_url: string; operator_token: string | null; created_at: string };
+
 export default function ConnectionPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const conn = useOpenClawConnection();
+  const gwRef = useRef<OpenClawGatewayClient | null>(null);
+
+  const [instances, setInstances] = useState<InstanceRow[]>([]);
+  const [instanceName, setInstanceName] = useState("Local Gateway");
+
+  const [busy, setBusy] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [testStatus, setTestStatus] = useState<string | null>(null);
+
+  async function refreshInstances() {
+    const res = await supabase.from("mc_openclaw_instances").select("id,name,gateway_ws_url,operator_token,created_at").order("created_at", { ascending: false });
+    if (!res.error) setInstances((res.data ?? []) as any);
+  }
+
+  useEffect(() => {
+    void refreshInstances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const selected = instances.find((x) => x.id === conn.instanceId) ?? null;
+
+  useEffect(() => {
+    if (!selected) return;
+    conn.setGatewayUrl(selected.gateway_ws_url);
+    conn.setToken(selected.operator_token ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
+  async function createInstance() {
+    setBusy(true);
+    setTestStatus(null);
+    try {
+      const ins = await supabase
+        .from("mc_openclaw_instances")
+        .insert({
+          name: instanceName.trim() || "OpenClaw",
+          gateway_ws_url: conn.gatewayUrl.trim(),
+          operator_token: conn.token.trim() || null
+        })
+        .select("id")
+        .single();
+      if (ins.error) throw ins.error;
+      conn.setInstanceId(ins.data!.id);
+      conn.save();
+      setSavedAt(Date.now());
+      await refreshInstances();
+    } catch (e: any) {
+      setTestStatus(e?.message ?? "Failed to save instance");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveInstance() {
+    if (!conn.instanceId) return void createInstance();
+    setBusy(true);
+    setTestStatus(null);
+    try {
+      const u = await supabase
+        .from("mc_openclaw_instances")
+        .update({
+          name: instanceName.trim() || "OpenClaw",
+          gateway_ws_url: conn.gatewayUrl.trim(),
+          operator_token: conn.token.trim() || null
+        })
+        .eq("id", conn.instanceId);
+      if (u.error) throw u.error;
+      conn.save();
+      setSavedAt(Date.now());
+      await refreshInstances();
+    } catch (e: any) {
+      setTestStatus(e?.message ?? "Failed to update instance");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testConnection() {
+    setBusy(true);
+    setTestStatus("Connecting…");
+    try {
+      gwRef.current?.disconnect();
+      const gw = new OpenClawGatewayClient({
+        url: conn.gatewayUrl,
+        token: conn.token,
+        role: "operator",
+        scopes: ["operator.read", "operator.write"],
+        client: { id: "mission-control", version: "0.1.0", platform: "web", mode: "operator", displayName: "Mission Control" }
+      });
+      gwRef.current = gw;
+      const hello = await gw.connect();
+      const health = await gw.rpc<any>("health", {}).catch(() => null);
+      setTestStatus(
+        `Connected: protocol=${hello.protocol} server=${hello.server?.version ?? "unknown"} connId=${hello.server?.connId ?? "n/a"}${health ? " · health ok" : ""}`
+      );
+    } catch (e: any) {
+      setTestStatus(e?.message ?? "Failed to connect");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div style={{ padding: 16, display: "grid", gap: 14, maxWidth: 860 }}>
       <div>
-        <div style={{ fontSize: 18, fontWeight: 900 }}>OpenClaw instance</div>
+        <div style={{ fontSize: 18, fontWeight: 900 }}>OpenClaw instances</div>
         <div style={{ opacity: 0.75, marginTop: 6 }}>
-          Set the Gateway WebSocket URL and operator token once. CoS, Agents, Workflows, and Ops will use this connection.
+          Create named instances, validate connectivity, and assign projects to an instance. CoS/Agents/Workflows/Ops use the selected project’s instance automatically.
         </div>
       </div>
 
       <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, display: "grid", gap: 10 }}>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700 }}>Active instance</span>
+          <select
+            value={conn.instanceId ?? ""}
+            onChange={(e) => {
+              const v = e.target.value || null;
+              conn.setInstanceId(v);
+              const row = instances.find((x) => x.id === v);
+              if (row) {
+                setInstanceName(row.name);
+                conn.setGatewayUrl(row.gateway_ws_url);
+                conn.setToken(row.operator_token ?? "");
+              }
+            }}
+            style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+          >
+            <option value="">(not saved yet)</option>
+            {instances.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700 }}>Instance name</span>
+          <input
+            value={instanceName}
+            onChange={(e) => setInstanceName(e.target.value)}
+            placeholder="e.g. Local WSL Gateway"
+            style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+          />
+        </label>
+
         <label style={{ display: "grid", gap: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 700 }}>Gateway WS URL</span>
           <input
@@ -50,19 +190,26 @@ export default function ConnectionPage() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              conn.save();
-              setSavedAt(Date.now());
-            }}
+            disabled={busy || !conn.gatewayUrl.trim()}
+            onClick={() => void saveInstance()}
             style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#111827", color: "white", fontWeight: 900, fontSize: 13 }}
           >
-            Save connection
+            Save instance
+          </button>
+          <button
+            type="button"
+            disabled={busy || !conn.gatewayUrl.trim()}
+            onClick={() => void testConnection()}
+            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 900, fontSize: 13 }}
+          >
+            Validate connection
           </button>
           <button
             type="button"
             onClick={() => {
               conn.clear();
               setSavedAt(null);
+              setTestStatus(null);
             }}
             style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", fontWeight: 800, fontSize: 13 }}
           >
@@ -70,6 +217,11 @@ export default function ConnectionPage() {
           </button>
           {savedAt ? <div style={{ fontSize: 13, opacity: 0.75, alignSelf: "center" }}>Saved.</div> : null}
         </div>
+        {testStatus ? (
+          <div style={{ fontSize: 13, opacity: 0.9, padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 10, background: "#fafafa" }}>
+            {testStatus}
+          </div>
+        ) : null}
       </div>
     </div>
   );

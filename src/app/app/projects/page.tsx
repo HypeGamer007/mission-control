@@ -4,13 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type Team = { id: string; name: string };
-type Project = { id: string; name: string; description: string | null; team_id: string; openclaw_gateway_ws_url: string | null };
+type Project = {
+  id: string;
+  name: string;
+  description: string | null;
+  team_id: string;
+  openclaw_gateway_ws_url: string | null;
+  openclaw_instance_id: string | null;
+};
+type Instance = { id: string; name: string };
 
 export default function ProjectsPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const [teams, setTeams] = useState<Team[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [instances, setInstances] = useState<Instance[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,14 +36,17 @@ export default function ProjectsPage() {
 
   async function refresh() {
     setError(null);
-    const [teamsRes, projectsRes] = await Promise.all([
+    const [teamsRes, projectsRes, instRes] = await Promise.all([
       supabase.from("mc_teams").select("id,name").order("created_at", { ascending: false }),
-      supabase.from("mc_projects").select("id,name,description,team_id,openclaw_gateway_ws_url").order("created_at", { ascending: false })
+      supabase.from("mc_projects").select("id,name,description,team_id,openclaw_gateway_ws_url,openclaw_instance_id").order("created_at", { ascending: false }),
+      supabase.from("mc_openclaw_instances").select("id,name").order("created_at", { ascending: false })
     ]);
     if (teamsRes.error) setError(teamsRes.error.message);
     if (projectsRes.error) setError(projectsRes.error.message);
+    if (instRes.error) setError(instRes.error.message);
     setTeams(teamsRes.data ?? []);
     setProjects(projectsRes.data ?? []);
+    setInstances((instRes.data ?? []) as any);
     if (!newProjectTeamId && (teamsRes.data?.[0]?.id ?? "")) setNewProjectTeamId(teamsRes.data![0]!.id);
   }
 
@@ -47,18 +59,8 @@ export default function ProjectsPage() {
     setBusy(true);
     setError(null);
     try {
-      const {
-        data: { user },
-        error: userError
-      } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error("Not authenticated");
-
       const teamIns = await supabase.from("mc_teams").insert({ name: newTeamName }).select("id,name").single();
       if (teamIns.error) throw teamIns.error;
-
-      const memberIns = await supabase.from("mc_team_members").insert({ team_id: teamIns.data.id, user_id: user.id, role: "admin" });
-      if (memberIns.error) throw memberIns.error;
 
       setNewTeamName("");
       await refresh();
@@ -73,13 +75,6 @@ export default function ProjectsPage() {
     setBusy(true);
     setError(null);
     try {
-      const {
-        data: { user },
-        error: userError
-      } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error("Not authenticated");
-
       const projectIns = await supabase
         .from("mc_projects")
         .insert({
@@ -92,9 +87,6 @@ export default function ProjectsPage() {
         .select("id")
         .single();
       if (projectIns.error) throw projectIns.error;
-
-      const memberIns = await supabase.from("mc_project_members").insert({ project_id: projectIns.data.id, user_id: user.id, role: "admin" });
-      if (memberIns.error) throw memberIns.error;
 
       setNewProjectName("");
       setNewProjectDesc("");
@@ -205,6 +197,34 @@ export default function ProjectsPage() {
               ) : (
                 <div style={{ opacity: 0.65, marginTop: 6, fontSize: 12 }}>Gateway: (using app default from env)</div>
               )}
+              <div style={{ marginTop: 10, display: "grid", gap: 6, maxWidth: 520 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.85 }}>OpenClaw instance</div>
+                <select
+                  value={p.openclaw_instance_id ?? ""}
+                  onChange={async (e) => {
+                    const v = e.target.value || null;
+                    setBusy(true);
+                    setError(null);
+                    try {
+                      const u = await supabase.from("mc_projects").update({ openclaw_instance_id: v }).eq("id", p.id);
+                      if (u.error) throw u.error;
+                      await refresh();
+                    } catch (err: any) {
+                      setError(err?.message ?? "Failed to assign instance");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+                >
+                  <option value="">(use active instance from OpenClaw page)</option>
+                  {instances.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div style={{ opacity: 0.75, marginTop: 6, fontSize: 12 }}>Project ID: {p.id}</div>
               {gwEditProjectId === p.id ? (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #f1f5f9", display: "grid", gap: 10 }}>

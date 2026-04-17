@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
 import { useOpenClawConnection } from "@/lib/openclaw/OpenClawConnectionContext";
+import { resolveProjectOpenClawCreds } from "@/lib/openclaw/resolveProjectInstance";
 
 type Project = { id: string; name: string; openclaw_gateway_ws_url: string | null };
 type ChatRow = { id: string; ts: number; role: "user" | "assistant" | "system"; label?: string; content: string };
@@ -48,9 +49,10 @@ export function CosChatDock() {
       const session = `cos_${projectId.replace(/-/g, "")}`;
       setSessionKey(session);
 
+      const creds = await resolveProjectOpenClawCreds(supabase as any, projectId, { gatewayUrl: conn.gatewayUrl, token: conn.token });
       const gw = new OpenClawGatewayClient({
-        url: conn.gatewayUrl,
-        token: conn.token,
+        url: creds.gatewayUrl,
+        token: creds.token,
         role: "operator",
         scopes: ["operator.read", "operator.write"],
         client: { id: "mission-control", version: "0.1.0", platform: "web", mode: "operator", displayName: "Mission Control" }

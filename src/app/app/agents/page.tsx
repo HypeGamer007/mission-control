@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { OpenClawGatewayClient } from "@/lib/openclaw/gatewayClient";
 import { useOpenClawConnection } from "@/lib/openclaw/OpenClawConnectionContext";
+import { resolveProjectOpenClawCreds } from "@/lib/openclaw/resolveProjectInstance";
 
 type Project = { id: string; name: string; openclaw_gateway_ws_url: string | null };
 type AgentTeam = { id: string; project_id: string; name: string; openclaw_workspace: string };
@@ -124,10 +125,11 @@ export default function AgentsPage() {
       setBusy(true);
       setError(null);
       try {
+        const creds = await resolveProjectOpenClawCreds(supabase as any, projectId || undefined, { gatewayUrl, token });
         gwRef.current?.disconnect();
         const gw = new OpenClawGatewayClient({
-          url: gatewayUrl,
-          token,
+          url: creds.gatewayUrl,
+          token: creds.token,
           role: "operator",
           scopes: ["operator.read", "operator.write"],
           client: { id: "mission-control", version: "0.1.0", platform: "web", mode: "operator", displayName: "Mission Control" }
@@ -144,7 +146,7 @@ export default function AgentsPage() {
         setBusy(false);
       }
     },
-    [gatewayUrl, token, refreshAgents]
+    [gatewayUrl, token, refreshAgents, projectId, supabase]
   );
 
   async function createAgentTeam() {
