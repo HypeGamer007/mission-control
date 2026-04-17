@@ -56,6 +56,7 @@ export class OpenClawGatewayClient {
   private lastTickAt = 0;
   private tickIntervalMs = 15_000;
   private tickWatchTimer: number | null = null;
+  private lastClose: { code?: number; reason?: string; wasClean?: boolean } | null = null;
 
   constructor(opts: GatewayConnectOptions = {}) {
     this.url = (opts.url?.trim() || env.NEXT_PUBLIC_OPENCLAW_GATEWAY_WS_URL) as string;
@@ -111,7 +112,7 @@ export class OpenClawGatewayClient {
     this.ws = ws;
 
     ws.addEventListener("message", (msg) => this.handleMessage(String(msg.data)));
-    ws.addEventListener("close", () => this.handleClose());
+    ws.addEventListener("close", (evt) => this.handleClose(evt));
     ws.addEventListener("error", () => this.handleClose());
 
     await new Promise<void>((resolve, reject) => {
@@ -241,10 +242,17 @@ export class OpenClawGatewayClient {
     }
   }
 
-  private handleClose() {
+  private handleClose(evt?: CloseEvent) {
     this.connected = false;
     this.connecting = false;
     this.stopTickWatchdog();
+
+    if (evt) {
+      this.lastClose = { code: evt.code, reason: evt.reason, wasClean: evt.wasClean };
+      this.emitEvent("connect.close", this.lastClose);
+    } else {
+      this.emitEvent("connect.close", { code: undefined, reason: "unknown", wasClean: undefined });
+    }
 
     for (const [id, pending] of this.pending.entries()) {
       window.clearTimeout(pending.timeoutId);

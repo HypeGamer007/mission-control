@@ -19,6 +19,12 @@ export default function ConnectionPage() {
   const [busy, setBusy] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [diag, setDiag] = useState<string[]>([]);
+
+  function pushDiag(line: string) {
+    const ts = new Date().toLocaleTimeString();
+    setDiag((prev) => [`[${ts}] ${line}`, ...prev].slice(0, 80));
+  }
 
   async function refreshInstances() {
     const res = await supabase.from("mc_openclaw_instances").select("id,name,gateway_ws_url,operator_token,created_at").order("created_at", { ascending: false });
@@ -91,6 +97,9 @@ export default function ConnectionPage() {
   async function testConnection() {
     setBusy(true);
     setTestStatus("Connecting…");
+    setDiag([]);
+    pushDiag(`WS URL: ${conn.gatewayUrl}`);
+    pushDiag(`Token: ${conn.token ? "(set)" : "(empty)"}`);
     try {
       gwRef.current?.disconnect();
       const gw = new OpenClawGatewayClient({
@@ -101,12 +110,28 @@ export default function ConnectionPage() {
         client: { id: "mission-control", version: "0.1.0", platform: "web", mode: "operator", displayName: "Mission Control" }
       });
       gwRef.current = gw;
+      const offClose = gw.on("connect.close", (evt) => {
+        const p = evt.payload as any;
+        pushDiag(`WS closed: code=${p?.code ?? "?"} reason=${p?.reason ?? ""}`);
+      });
+      const offShutdown = gw.on("shutdown", (evt) => pushDiag(`shutdown: ${JSON.stringify(evt.payload)}`));
+      const offChallenge = gw.on("connect.challenge", () => pushDiag("connect.challenge received (pairing/identity may be required)"));
+      const offHello = gw.on("hello-ok", (evt) => pushDiag(`hello-ok: ${JSON.stringify((evt.payload as any)?.server ?? {})}`));
+
+      pushDiag("Opening WebSocket…");
       const hello = await gw.connect();
+      pushDiag("Connected. Calling health…");
       const health = await gw.rpc<any>("health", {}).catch(() => null);
+      offClose();
+      offShutdown();
+      offChallenge();
+      offHello();
       setTestStatus(
         `Connected: protocol=${hello.protocol} server=${hello.server?.version ?? "unknown"} connId=${hello.server?.connId ?? "n/a"}${health ? " · health ok" : ""}`
       );
     } catch (e: any) {
+      const msg = e?.message ?? "Failed to connect";
+      pushDiag(`ERROR: ${msg}`);
       setTestStatus(e?.message ?? "Failed to connect");
     } finally {
       setBusy(false);
@@ -220,6 +245,23 @@ export default function ConnectionPage() {
         {testStatus ? (
           <div style={{ fontSize: 13, opacity: 0.9, padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 10, background: "#fafafa" }}>
             {testStatus}
+          </div>
+        ) : null}
+        {diag.length ? (
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, background: "white", padding: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div style={{ fontWeight: 800, fontSize: 13 }}>Connection diagnostics</div>
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(diag.slice().reverse().join("\n"))}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", background: "white", fontSize: 12, fontWeight: 700 }}
+              >
+                Copy
+              </button>
+            </div>
+            <pre style={{ margin: "8px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12, maxHeight: 220, overflow: "auto" }}>
+              {diag.slice().reverse().join("\n")}
+            </pre>
           </div>
         ) : null}
       </div>
